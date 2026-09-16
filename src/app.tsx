@@ -1,6 +1,6 @@
 import { Routes, Route } from 'react-router-dom';
 import { Toaster } from 'sonner';
-import { Layout } from './components/Layout';
+import Layout from './components/Layout';
 import ImageResizerPage from './pages/ImageResizerPage/ImageResizerPage';
 import NotFoundPage from './pages/NotFoundPage/NotFoundPage';
 
