@@ -1,0 +1,39 @@
+{
+  "name": "image-resizer-2048",
+  "version": "1.0.0",
+  "description": "图片长边缩放工具 - 拖拽即处理，Lanczos3 专业画质，长边 2048px 等比缩放",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@jsquash/jpeg": "^1.6.0",
+    "@jsquash/png": "^3.1.1",
+    "@jsquash/resize": "^2.1.1",
+    "@jsquash/webp": "^1.5.0",
+    "@radix-ui/react-slot": "^1.2.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.38.0",
+    "jszip": "^3.10.2",
+    "lucide-react": "0.577.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.13.2",
+    "sonner": "^2.0.7",
+    "tailwind-merge": "^3.5.0",
+    "tailwindcss": "^4.2.2",
+    "tw-animate-css": "^1.2.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^5.0.0",
+    "postcss": "^8.4.49",
+    "typescript": "~5.9",
+    "vite": "^8"
+  }
+}
