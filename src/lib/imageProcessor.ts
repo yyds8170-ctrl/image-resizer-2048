@@ -52,9 +52,110 @@ export function isSupportedImage(file: File): boolean {
   return SUPPORTED_FORMATS.includes(type);
 }
 
+/**
+ * 从文件头解析图片尺寸（JPEG / PNG / WebP）
+ * 只读取文件前 64KB，完全不解码像素数据，
+ * 相比 createImageBitmap（解码整图）内存开销可忽略，
+ * 是批量处理大图时避免内存爆炸的关键优化。
+ */
+function parseDimensionsFromHeader(file: File): Promise<{ width: number; height: number } | null> {
+  return new Promise((resolve) => {
+    try {
+      const blob = file.slice(0, 64 * 1024);
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const buf = reader.result as ArrayBuffer;
+          const bytes = new Uint8Array(buf);
+          const view = new DataView(buf);
+
+          // --- PNG: 固定头 8 字节，IHDR 尺寸在 offset 16/20 ---
+          if (
+            bytes.length >= 24 &&
+            bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47
+          ) {
+            const width = view.getUint32(16);
+            const height = view.getUint32(20);
+            if (width > 0 && height > 0) {
+              resolve({ width, height });
+              return;
+            }
+          }
+
+          // --- JPEG: 遍历 marker 找 SOF（SOF0~SOF15，排除 DHT/DAC/DNL） ---
+          if (
+            bytes.length >= 4 &&
+            bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff
+          ) {
+            let offset = 2;
+            while (offset + 9 < bytes.length) {
+              if (bytes[offset] !== 0xff) {
+                offset++;
+                continue;
+              }
+              const marker = bytes[offset + 1];
+              if (marker >= 0xc0 && marker <= 0xcf &&
+                  marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+                const height = view.getUint16(offset + 5);
+                const width = view.getUint16(offset + 7);
+                if (width > 0 && height > 0) {
+                  resolve({ width, height });
+                  return;
+                }
+              }
+              const segLen = view.getUint16(offset + 2);
+              if (segLen < 2) break;
+              offset += 2 + segLen;
+            }
+          }
+
+          // --- WebP: RIFF/WEBP 容器 ---
+          if (
+            bytes.length >= 30 &&
+            bytes[0] === 0x52 && bytes[1] === 0x49 && bytes[2] === 0x46 && bytes[3] === 0x46 &&
+            bytes[8] === 0x57 && bytes[9] === 0x45 && bytes[10] === 0x42 && bytes[11] === 0x50
+          ) {
+            const chunkType = String.fromCharCode(bytes[12], bytes[13], bytes[14], bytes[15]);
+            if (chunkType === 'VP8 ' && bytes.length >= 30) {
+              // VP8 有损：帧标签 3 + 起始码 3 + 宽 2（14bit）+ 高 2
+              const width = view.getUint16(26, true) & 0x3fff;
+              const height = view.getUint16(28, true) & 0x3fff;
+              if (width > 0 && height > 0) { resolve({ width, height }); return; }
+            } else if (chunkType === 'VP8L' && bytes.length >= 25) {
+              // VP8L 无损：签名 1 字节 + 打包位 4 字节（14bit 宽-1 / 14bit 高-1）
+              const bits = view.getUint32(21, true);
+              const width = (bits & 0x3fff) + 1;
+              const height = ((bits >> 14) & 0x3fff) + 1;
+              if (width > 0 && height > 0) { resolve({ width, height }); return; }
+            } else if (chunkType === 'VP8X' && bytes.length >= 30) {
+              // VP8X 扩展：画布宽-1 / 高-1（各 24bit LE）
+              const width = ((bytes[24] | (bytes[25] << 8) | (bytes[26] << 16)) & 0xffffff) + 1;
+              const height = ((bytes[27] | (bytes[28] << 8) | (bytes[29] << 16)) & 0xffffff) + 1;
+              if (width > 0 && height > 0) { resolve({ width, height }); return; }
+            }
+          }
+
+          resolve(null);
+        } catch {
+          resolve(null);
+        }
+      };
+      reader.onerror = () => resolve(null);
+      reader.readAsArrayBuffer(blob);
+    } catch {
+      resolve(null);
+    }
+  });
+}
+
 export async function readImageDimensions(
   file: File,
 ): Promise<{ width: number; height: number }> {
+  // 优先文件头解析：零解码、零内存压力
+  const fromHeader = await parseDimensionsFromHeader(file);
+  if (fromHeader) return fromHeader;
+
+  // 兜底：createImageBitmap 解码整图（仅当头部解析失败）
   try {
     if (typeof createImageBitmap !== 'undefined') {
       const bitmap = await createImageBitmap(file, { premultiplyAlpha: 'none' });

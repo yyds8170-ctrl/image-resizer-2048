@@ -1,4 +1,4 @@
-import { Loader2, CheckCircle2, Clock, Sparkles } from 'lucide-react';
+import { Loader2, CheckCircle2, Clock, Sparkles, FileSearch } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { cn } from '@/lib/utils';
 
@@ -6,13 +6,25 @@ interface ProgressSectionProps {
   total: number;
   processed: number;
   isProcessing: boolean;
+  isReading?: boolean;
+  readDone?: number;
+  readTotal?: number;
 }
 
-export default function ProgressSection({ total, processed, isProcessing }: ProgressSectionProps) {
-  if (total === 0) return null;
+export default function ProgressSection({
+  total,
+  processed,
+  isProcessing,
+  isReading = false,
+  readDone = 0,
+  readTotal = 0,
+}: ProgressSectionProps) {
+  // 读取阶段：只要有文件正在读取就显示读取进度（可能还没任何图片加入列表）
+  if (total === 0 && !isReading) return null;
 
+  const readPercent = readTotal > 0 ? Math.round((readDone / readTotal) * 100) : 0;
   const percentage = total > 0 ? Math.round((processed / total) * 100) : 0;
-  const isComplete = processed === total && !isProcessing;
+  const isComplete = total > 0 && processed === total && !isProcessing && !isReading;
 
   return (
     <section className="w-full">
@@ -24,7 +36,25 @@ export default function ProgressSection({ total, processed, isProcessing }: Prog
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <AnimatePresence mode="wait" initial={false}>
-                {isProcessing ? (
+                {isReading ? (
+                  <motion.div
+                    key="reading"
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    exit={{ opacity: 0, scale: 0.8 }}
+                    transition={{ duration: 0.2 }}
+                    className="flex items-center gap-2"
+                  >
+                    <div className="relative">
+                      <FileSearch className="w-4 h-4 text-primary animate-pulse" />
+                    </div>
+                    <span className="text-sm font-medium text-foreground">
+                      正在读取{' '}
+                      <span className="font-mono text-primary tabular-nums">{readDone}</span> /{' '}
+                      {readTotal}
+                    </span>
+                  </motion.div>
+                ) : isProcessing ? (
                   <motion.div
                     key="processing"
                     initial={{ opacity: 0, scale: 0.8 }}
@@ -88,7 +118,7 @@ export default function ProgressSection({ total, processed, isProcessing }: Prog
                 isComplete ? 'text-success' : 'text-primary',
               )}
             >
-              {percentage}%
+              {isReading ? readPercent : percentage}%
             </span>
           </div>
 
@@ -98,13 +128,13 @@ export default function ProgressSection({ total, processed, isProcessing }: Prog
               className="absolute inset-y-0 left-0 rounded-full"
               initial={false}
               animate={{
-                width: `${percentage}%`,
+                width: `${isReading ? readPercent : percentage}%`,
                 backgroundColor: isComplete ? 'hsl(152 40% 38%)' : 'hsl(215 32% 22%)',
               }}
               transition={{ duration: 0.4, ease: 'easeOut' }}
             />
             {/* 进度条微光 */}
-            {isProcessing && (
+            {(isProcessing || isReading) && (
               <motion.div
                 className="absolute inset-y-0 w-1/3 bg-gradient-to-r from-transparent via-white/30 to-transparent"
                 animate={{ x: ['-100%', '300%'] }}

@@ -22,7 +22,6 @@ import FooterSection from './sections/FooterSection';
 const BASE_CONCURRENCY = 6;
 const MAX_CONCURRENCY = 8;
 const MEMORY_BUDGET_MB = 300;
-const INIT_CONCURRENCY = 8;
 
 // jSquash WASM 模式下并发更低（单线程 WASM，内存开销适中）
 const JSQUASH_MAX_CONCURRENCY = 3;
@@ -33,6 +32,8 @@ export default function ImageResizerPage() {
   const [qualityMode, setQualityMode] = useState<QualityMode>('standard');
   const [isProcessing, setIsProcessing] = useState(false);
   const [isPackaging, setIsPackaging] = useState(false);
+  const [isReading, setIsReading] = useState(false);
+  const [readProgress, setReadProgress] = useState({ done: 0, total: 0 });
   const processingRef = useRef(false);
   const queueRef = useRef<IImageItem[]>([]);
   const cancelledRef = useRef(false);
@@ -87,45 +88,52 @@ export default function ImageResizerPage() {
     // 小图优先处理，提升感知速度
     imageFiles.sort((a, b) => a.size - b.size);
 
+    // 内存保护提示：纯前端处理超大文件时会占用大量内存
+    const totalBytes = imageFiles.reduce((sum, f) => sum + f.size, 0);
+    if (totalBytes > 800 * 1024 * 1024) {
+      toast.warning('文件总量较大', {
+        description: `共 ${(totalBytes / (1024 * 1024)).toFixed(0)}MB，纯前端处理建议分批（每批 ≤500MB）以获得最佳体验`,
+      });
+    }
+    const largeFiles = imageFiles.filter((f) => f.size > 80 * 1024 * 1024);
+    if (largeFiles.length > 0) {
+      toast.info(`${largeFiles.length} 张图片超过 80MB，处理时可能较慢`);
+    }
+
     try {
-      const validItems: IImageItem[] = [];
       let idx = 0;
       let failed = 0;
 
-      const workers = Array.from({ length: INIT_CONCURRENCY }, async () => {
+      // 读取阶段限并发（头部解析零内存，但兜底路径仍可能解码整图）
+      const READ_CONCURRENCY = 4;
+      setIsReading(true);
+      setReadProgress({ done: 0, total: imageFiles.length });
+
+      const workers = Array.from({ length: READ_CONCURRENCY }, async () => {
         while (idx < imageFiles.length) {
           const currentIdx = idx++;
           const file = imageFiles[currentIdx];
           if (!file) break;
           try {
             const item = await createImageItem(file);
-            validItems.push(item);
+            // 流式加入：每张解析完成立即显示并进入处理队列，
+            // 而不是等全部解析完再一次性渲染（避免长时间无反馈）
+            setImages((prev) => [...prev, item]);
           } catch (err) {
             failed += 1;
             console.warn('[ImageResizer] 图片加载失败:', file.name, String(err));
+          } finally {
+            setReadProgress((p) => ({ ...p, done: p.done + 1 }));
           }
         }
       });
       await Promise.all(workers);
-
-      if (validItems.length === 0) {
-        toast.error('图片加载失败');
-        return;
-      }
-
-      // 小图优先
-      validItems.sort((a, b) => {
-        const aLong = Math.max(a.originalWidth, a.originalHeight);
-        const bLong = Math.max(b.originalWidth, b.originalHeight);
-        return aLong - bLong;
-      });
-
-      setImages((prev) => [...prev, ...validItems]);
+      setIsReading(false);
 
       if (failed > 0) {
-        toast.info(`${validItems.length} 张已加入处理，${failed} 张加载失败`);
+        toast.info(`${imageFiles.length - failed} 张已加入处理，${failed} 张加载失败`);
       } else {
-        toast.success(`已添加 ${validItems.length} 张图片，开始处理`);
+        toast.success(`已添加 ${imageFiles.length} 张图片，开始处理`);
       }
     } catch (err) {
       console.error('[ImageResizer] 添加图片失败:', String(err));
@@ -278,6 +286,9 @@ export default function ImageResizerPage() {
             total={images.length}
             processed={processedCount}
             isProcessing={isProcessing}
+            isReading={isReading}
+            readDone={readProgress.done}
+            readTotal={readProgress.total}
           />
           <ResultsSection
             images={images}
