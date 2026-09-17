@@ -9,6 +9,7 @@ interface ProgressSectionProps {
   isReading?: boolean;
   readDone?: number;
   readTotal?: number;
+  processingName?: string;
 }
 
 export default function ProgressSection({
@@ -18,6 +19,7 @@ export default function ProgressSection({
   isReading = false,
   readDone = 0,
   readTotal = 0,
+  processingName,
 }: ProgressSectionProps) {
   // 读取阶段：只要有文件正在读取就显示读取进度（可能还没任何图片加入列表）
   if (total === 0 && !isReading) return null;
@@ -70,6 +72,11 @@ export default function ProgressSection({
                       正在处理{' '}
                       <span className="font-mono text-primary tabular-nums">{processed}</span> /{' '}
                       {total}
+                      {processingName && (
+                        <span className="ml-1.5 text-muted-foreground font-normal max-w-[220px] truncate inline-block align-bottom">
+                          {processingName}
+                        </span>
+                      )}
                     </span>
                   </motion.div>
                 ) : isComplete ? (

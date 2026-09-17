@@ -11,6 +11,7 @@ import {
   buildOutputFileName,
 } from '@/lib/imageProcessor';
 import { isJsquashAvailable, initJsquash, type QualityMode } from '@/lib/jsquashEngine';
+import { initWorkerPool, getWorkerCount } from '@/lib/workerPool';
 import HeaderSection from './sections/HeaderSection';
 import DropZoneSection from './sections/DropZoneSection';
 import ProgressSection from './sections/ProgressSection';
@@ -19,13 +20,8 @@ import QualityInfoSection from './sections/QualityInfoSection';
 import FooterSection from './sections/FooterSection';
 
 // 并发配置（canvas 回退模式）
-const BASE_CONCURRENCY = 6;
 const MAX_CONCURRENCY = 8;
 const MEMORY_BUDGET_MB = 300;
-
-// jSquash WASM 模式下并发更低（单线程 WASM，内存开销适中）
-const JSQUASH_MAX_CONCURRENCY = 3;
-const JSQUASH_MEMORY_BUDGET_MB = 400;
 
 export default function ImageResizerPage() {
   const [images, setImages] = useState<IImageItem[]>([]);
@@ -52,25 +48,30 @@ export default function ImageResizerPage() {
   );
 
   const calcConcurrency = useCallback((queue: IImageItem[]): number => {
-    if (queue.length === 0) return BASE_CONCURRENCY;
+    if (queue.length === 0) return 1;
 
-    const useWasm = isJsquashAvailable();
-    const maxConcurrency = useWasm ? JSQUASH_MAX_CONCURRENCY : MAX_CONCURRENCY;
-    const memoryBudget = useWasm ? JSQUASH_MEMORY_BUDGET_MB : MEMORY_BUDGET_MB;
+    // Worker 池：独立线程 + 独立 WASM 实例，并发 = Worker 数（真并行）
+    const workerCount = getWorkerCount();
+    if (workerCount > 0) return Math.min(workerCount, queue.length);
 
-    const sample = queue.slice(0, maxConcurrency * 2);
+    // 主线程 jSquash：WASM 同步阻塞主线程，多并发无收益且叠加内存，固定 1
+    if (isJsquashAvailable()) return 1;
+
+    // Canvas 回退：浏览器原生多线程解码，真实异步，按内存预算并发
+    const sample = queue.slice(0, MAX_CONCURRENCY * 2);
     const avgMem =
       sample.reduce((sum, item) => sum + estimateMemoryMB(item), 0) / sample.length;
 
-    if (avgMem < 20 && !useWasm) return maxConcurrency;
+    if (avgMem < 20) return MAX_CONCURRENCY;
 
-    const byMemory = Math.floor(memoryBudget / Math.max(avgMem, 1));
-    return Math.max(1, Math.min(maxConcurrency, byMemory));
+    const byMemory = Math.floor(MEMORY_BUDGET_MB / Math.max(avgMem, 1));
+    return Math.max(1, Math.min(MAX_CONCURRENCY, byMemory));
   }, []);
 
   const handleFilesSelected = useCallback(async (files: File[]) => {
-    // 预先初始化 jSquash（不阻塞，但尽快开始加载）
+    // 预先初始化 jSquash 与 Worker 池（不阻塞，但尽快开始加载）
     initJsquash().catch(() => {});
+    initWorkerPool().catch(() => {});
     const imageFiles = files.filter((f) => isSupportedImage(f));
 
     if (imageFiles.length === 0) {
@@ -289,6 +290,9 @@ export default function ImageResizerPage() {
             isReading={isReading}
             readDone={readProgress.done}
             readTotal={readProgress.total}
+            processingName={
+              images.find((i) => i.status === 'processing')?.name
+            }
           />
           <ResultsSection
             images={images}

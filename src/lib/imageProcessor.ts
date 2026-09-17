@@ -1,6 +1,7 @@
 import type { IImageItem } from '@/data/image';
 import { TARGET_LONG_SIDE, SUPPORTED_FORMATS } from '@/data/image';
 import { initJsquash, isJsquashAvailable, processWithJsquash, type QualityMode } from './jsquashEngine';
+import { initWorkerPool, processWithWorkers, getWorkerCount } from './workerPool';
 
 const JPEG_QUALITY = 0.95;
 const WEBP_QUALITY = 0.95;
@@ -233,7 +234,7 @@ export async function processImage(
       return updated;
     }
 
-    // 先尝试 jSquash WASM 管线
+    // 先尝试 jSquash WASM 管线（Worker 池并行 → 主线程回退）
     const jsquashReady = await initJsquash();
     if (jsquashReady && isJsquashAvailable()) {
       try {
@@ -243,13 +244,29 @@ export async function processImage(
         const targetHeight = isWidthLonger ? Math.round(item.originalHeight * ratio) : TARGET_LONG_SIDE;
 
         const mimeType = getMimeType(item.file);
-        const result = await processWithJsquash({
-          file: item.file,
-          mimeType,
-          targetWidth,
-          targetHeight,
-          qualityMode,
-        });
+        let result: { blob: Blob; width: number; height: number; outputMimeType: string };
+
+        // Worker 池可用：独立线程 + 独立 WASM 实例，多张图真正并行
+        const workerCount = getWorkerCount();
+        if (workerCount > 0) {
+          result = await processWithWorkers({
+            buffer: await item.file.arrayBuffer(),
+            mimeType,
+            targetWidth,
+            targetHeight,
+            qualityMode,
+          });
+        } else {
+          // 主线程回退：单线程 WASM（同步执行，一次一张）
+          result = await processWithJsquash({
+            file: item.file,
+            mimeType,
+            targetWidth,
+            targetHeight,
+            qualityMode,
+          });
+        }
+
         updated.status = 'done';
         updated.processedBlob = result.blob;
         updated.processedWidth = result.width;
