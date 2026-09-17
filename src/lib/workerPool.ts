@@ -9,6 +9,8 @@
 interface WorkerProcessRequest {
   buffer: ArrayBuffer;
   mimeType: string;
+  originalWidth: number;
+  originalHeight: number;
   targetWidth: number;
   targetHeight: number;
   qualityMode: 'standard' | 'lossless';
@@ -31,7 +33,8 @@ export function getDesiredWorkerCount(): number {
   try {
     const deviceMemory = (navigator as unknown as { deviceMemory?: number }).deviceMemory;
     const mem = typeof deviceMemory === 'number' && deviceMemory > 0 ? deviceMemory : 4;
-    if (mem >= 8) return 3;
+    if (mem >= 16) return 6;
+    if (mem >= 8) return 4;
     if (mem >= 4) return 2;
     return 1;
   } catch {
@@ -153,6 +156,8 @@ export function processWithWorkers(request: WorkerProcessRequest): Promise<Worke
         id,
         buffer: request.buffer,
         mimeType: request.mimeType,
+        originalWidth: request.originalWidth,
+        originalHeight: request.originalHeight,
         targetWidth: request.targetWidth,
         targetHeight: request.targetHeight,
         qualityMode: request.qualityMode,

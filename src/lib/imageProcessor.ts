@@ -252,6 +252,8 @@ export async function processImage(
           result = await processWithWorkers({
             buffer: await item.file.arrayBuffer(),
             mimeType,
+            originalWidth: item.originalWidth,
+            originalHeight: item.originalHeight,
             targetWidth,
             targetHeight,
             qualityMode,
