@@ -2,10 +2,10 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
-// GitHub Pages 部署时，将 base 设为你的仓库名，例如 '/image-resizer-2048/'
-// 本地开发或自定义域名部署时，保持 './'
+// GitHub Pages 项目站点固定部署在 /image-resizer-2048/ 子路径
+// base 必须为绝对子路径，BrowserRouter basename 同步使用 import.meta.env.BASE_URL
 export default defineConfig({
-  base: './',
+  base: '/image-resizer-2048/',
   plugins: [react()],
   resolve: {
     alias: {
