@@ -4,6 +4,16 @@
 
 一个纯前端的图片批量处理工具，将图片长边统一缩放为 2048 像素，保持宽高比，全程本地处理不上传云端。基于 MozJPEG + Lanczos3 + 线性光空间的 WASM 全链路专业画质管线。
 
+## 🌐 在线使用
+
+无需安装，直接在浏览器打开：
+
+**https://yyds8170-ctrl.github.io/image-resizer-2048/**
+
+- 源码仓库：https://github.com/yyds8170-ctrl/image-resizer-2048
+- 部署方式：GitHub Actions 自动构建 + GitHub Pages 托管，每次推送 `main` 分支后自动重新发布
+- 全程纯前端本地处理，图片不上传任何服务器
+
 ## 功能特性
 
 - 🖼️ **批量处理**：支持拖入单张图片或整个文件夹，批量处理所有 JPG/PNG/WebP 格式图片
@@ -105,16 +115,15 @@ image-resizer-2048/
 
 ## 部署到 GitHub Pages
 
-### 方法一：GitHub Actions 自动部署（推荐）
+### 当前状态（已部署上线）
 
-仓库中已包含 `.github/workflows/deploy.yml`，只需：
+本项目已启用 **GitHub Actions + GitHub Pages** 自动部署：
 
-1. 推送代码到 `main` 分支
-2. 进入仓库 Settings → Pages
-3. 在 "Build and deployment" 中选择 "GitHub Actions" 作为来源
-4. 等待 Actions 执行完成后即可访问
+- 在线地址：https://yyds8170-ctrl.github.io/image-resizer-2048/
+- 推送 `main` 分支 → Actions 自动 `npm ci && npm run build` → 发布到 Pages
+- Pages 来源已在仓库 Settings → Pages 中配置为 "GitHub Actions"
 
-### 方法二：手动部署
+### 手动部署
 
 ```bash
 # 构建
@@ -129,7 +138,8 @@ gh-pages -d dist
 
 ### 注意事项
 
-- `vite.config.ts` 中已配置 `base: './'`，支持任意子路径部署
+- `vite.config.ts` 中已配置 `base: '/image-resizer-2048/'`（与 GitHub Pages 子路径一致），`main.tsx` 中 `BrowserRouter` 同步使用 `basename=import.meta.env.BASE_URL`，确保子路径部署下路由正常
+- 部署在其他子路径或自定义域名时，需同步修改 `vite.config.ts` 的 `base`
 - WASM 文件通过 Vite 自动处理，构建时会输出到 `dist/assets/` 目录
 
 ## 浏览器兼容性
